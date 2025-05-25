@@ -1,25 +1,23 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>Leitor de QR Code</title>
 </head>
 <body>
-    <h1>Enviar arquivo para leitura de QR Code</h1>
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="arquivo" required>
-        <button type="submit">Enviar</button>
+    <h1>Leitor de QR Code</h1>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.webp">
+        <input type="submit" value="Enviar">
     </form>
-
+    
     {% if resultado %}
-        <h2>Resultado:</h2>
-        <ul>
-            {% for item in resultado %}
-                <li>{{ item }}</li>
-            {% endfor %}
-        </ul>
+    <h2>Resultado:</h2>
+    <ul>
+    {% for item in resultado %}
+        <li>{{ item }}</li>
+    {% endfor %}
+    </ul>
     {% endif %}
 </body>
 </html>
-
 
