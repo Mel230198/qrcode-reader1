@@ -5,20 +5,21 @@
     <title>Leitor de QR Code</title>
 </head>
 <body>
-    <h2>Enviar imagem ou PDF com QR Code</h2>
+    <h1>Enviar arquivo para leitura de QR Code</h1>
     <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="arquivo" accept=".pdf, .jpg, .jpeg, .png" required>
+        <input type="file" name="arquivo" required>
         <button type="submit">Enviar</button>
     </form>
 
     {% if resultado %}
-        <h3>Resultado:</h3>
+        <h2>Resultado:</h2>
         <ul>
-            {% for r in resultado %}
-                <li>{{ r }}</li>
+            {% for item in resultado %}
+                <li>{{ item }}</li>
             {% endfor %}
         </ul>
     {% endif %}
 </body>
 </html>
+
 
