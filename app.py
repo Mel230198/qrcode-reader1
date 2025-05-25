@@ -5,6 +5,7 @@ import numpy as np
 from pyzbar.pyzbar import decode
 from pdf2image import convert_from_bytes
 from werkzeug.utils import secure_filename
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -30,11 +31,18 @@ def ler_qrcode_cv2(imagem_cv):
         return [f"Erro ao processar imagem: {str(e)}"]
 
 def ler_qrcode_de_imagem(caminho_imagem):
-    """Lê QR Code de uma imagem em disco."""
-    imagem_cv = cv2.imread(caminho_imagem)
-    if imagem_cv is None:
-        return [f"Erro ao abrir a imagem: {caminho_imagem}"]
-    return ler_qrcode_cv2(imagem_cv)
+    """Lê QR Code de uma imagem em disco usando Pillow e OpenCV."""
+    try:
+        # Abrir imagem com Pillow e converter para RGB
+        imagem_pil = Image.open(caminho_imagem).convert('RGB')
+        imagem_cv = np.array(imagem_pil)
+        # Converter RGB para BGR para OpenCV
+        imagem_cv = cv2.cvtColor(imagem_cv, cv2.COLOR_RGB2BGR)
+
+        print(f"Imagem carregada com sucesso: shape={imagem_cv.shape}, dtype={imagem_cv.dtype}")
+        return ler_qrcode_cv2(imagem_cv)
+    except Exception as e:
+        return [f"Erro ao abrir/processar a imagem: {str(e)}"]
 
 def ler_qrcode_de_pdf(conteudo_pdf):
     """Lê QR Codes de um arquivo PDF convertido em imagens."""
@@ -78,5 +86,4 @@ def index():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # O host 0.0.0.0 é necessário para aceitar conexões externas no container
     app.run(host='0.0.0.0', port=port, debug=True)
