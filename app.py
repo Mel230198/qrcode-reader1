@@ -11,14 +11,16 @@ app = Flask(__name__)
 # Pasta para armazenar arquivos temporários
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png'}
 
 def allowed_file(filename):
+    """Verifica se o arquivo possui extensão permitida."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def ler_qrcode_cv2(imagem_cv):
+    """Lê QR Codes a partir de uma imagem OpenCV."""
     try:
-        # Convertendo para escala de cinza para melhorar a detecção
         imagem_gray = cv2.cvtColor(imagem_cv, cv2.COLOR_BGR2GRAY)
         qrcodes = decode(imagem_gray)
         if qrcodes:
@@ -28,12 +30,14 @@ def ler_qrcode_cv2(imagem_cv):
         return [f"Erro ao processar imagem: {str(e)}"]
 
 def ler_qrcode_de_imagem(caminho_imagem):
+    """Lê QR Code de uma imagem em disco."""
     imagem_cv = cv2.imread(caminho_imagem)
     if imagem_cv is None:
         return [f"Erro ao abrir a imagem: {caminho_imagem}"]
     return ler_qrcode_cv2(imagem_cv)
 
 def ler_qrcode_de_pdf(conteudo_pdf):
+    """Lê QR Codes de um arquivo PDF convertido em imagens."""
     try:
         paginas = convert_from_bytes(conteudo_pdf, dpi=300)
         resultados = []
@@ -67,9 +71,12 @@ def index():
                     conteudo = f.read()
                 resultado = ler_qrcode_de_pdf(conteudo)
 
+            # Apaga o arquivo temporário
             os.remove(caminho_salvo)
 
     return render_template('index.html', resultado=resultado)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    # O host 0.0.0.0 é necessário para aceitar conexões externas no container
+    app.run(host='0.0.0.0', port=port, debug=True)
