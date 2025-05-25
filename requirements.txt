@@ -1,7 +1,5 @@
 Flask
-opencv-python-headless
+Pillow
 pyzbar
 pdf2image
-numpy
-Pillow
-
+werkzeug
