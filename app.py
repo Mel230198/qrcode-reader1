@@ -18,7 +18,9 @@ def allowed_file(filename):
 
 def ler_qrcode_cv2(imagem_cv):
     try:
-        qrcodes = decode(imagem_cv)
+        # Convertendo para escala de cinza para melhorar a detecção
+        imagem_gray = cv2.cvtColor(imagem_cv, cv2.COLOR_BGR2GRAY)
+        qrcodes = decode(imagem_gray)
         if qrcodes:
             return [q.data.decode('utf-8') for q in qrcodes]
         return ["Nenhum QR Code detectado."]
