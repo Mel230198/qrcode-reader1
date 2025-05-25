@@ -1,6 +1,7 @@
-Flask==2.3.3
-opencv-python
+Flask
+opencv-python-headless
 pyzbar
 pdf2image
+numpy
 Pillow
-gunicorn
+
