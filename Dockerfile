@@ -1,31 +1,30 @@
-# Imagem base com Python 3.10
+# Usa imagem oficial do Python como base
 FROM python:3.10-slim
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+# Instala dependências do sistema para compilação e bibliotecas necessárias
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    poppler-utils \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender1 \
-    libgl1-mesa-glx \
-    libzbar0 \
-    poppler-utils \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Define diretório de trabalho
+# Cria diretório da aplicação
 WORKDIR /app
 
-# Copia o conteúdo da aplicação
+# Copia os arquivos da aplicação para o container
 COPY . .
 
-# Instala dependências Python
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Instala as dependências do Python
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expõe a porta usada pelo Gunicorn
-EXPOSE 10000
+# Expõe a porta usada pela aplicação Flask
+EXPOSE 5000
 
-# Comando padrão para iniciar o servidor
-CMD ["gunicorn", "-b", "0.0.0.0:10000", "app:app"]
+# Comando para iniciar o Flask
+CMD ["python", "app.py"]
+
 
