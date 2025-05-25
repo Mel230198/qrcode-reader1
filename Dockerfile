@@ -8,7 +8,8 @@ RUN apt-get update && \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev && \
+    libxrender-dev \
+    libgl1-mesa-glx && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
