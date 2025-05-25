@@ -1,7 +1,6 @@
-# Usa imagem oficial do Python como base
 FROM python:3.10-slim
 
-# Instala dependências do sistema necessárias para pdf2image, OpenCV, pyzbar, etc
+# Instala dependências do sistema
 RUN apt-get update && apt-get install -y \
     build-essential \
     poppler-utils \
@@ -16,14 +15,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY . .
-
+COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
 
 EXPOSE 5000
 
 CMD ["python", "app.py"]
-
 
 
 
