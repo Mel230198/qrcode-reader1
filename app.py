@@ -4,15 +4,14 @@ import logging
 from werkzeug.utils import secure_filename
 from utils import allowed_file, ler_qrcode_de_pdf, ler_qrcode_de_imagem
 
-# Configuração inicial
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Extensões permitidas
+# Tipos permitidos
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
 
-# Logger
+# Configuração de log
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -38,6 +37,7 @@ def index():
                     arquivo.save(caminho)
                     resultado = ler_qrcode_de_imagem(caminho)
                     os.remove(caminho)
+
             except Exception as e:
                 logger.exception("Erro durante o processamento")
                 resultado = [f"Erro durante o processamento: {str(e)}"]
