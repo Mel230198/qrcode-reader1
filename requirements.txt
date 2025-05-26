@@ -1,5 +1,6 @@
-Flask
+flask
+werkzeug
 Pillow
 pyzbar
 pdf2image
-werkzeug
+opencv-python-headless
