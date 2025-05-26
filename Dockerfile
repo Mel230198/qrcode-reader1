@@ -1,10 +1,8 @@
-# Usar imagem base oficial do Python, slim para menor tamanho
 FROM python:3.10-slim
 
-# Variáveis de ambiente para não gerar prompts interativos no apt
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Atualiza e instala dependências necessárias para o app e tesseract
+# Atualiza e instala dependências essenciais, evita pacotes recomendados desnecessários
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     poppler-utils \
@@ -15,21 +13,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     libzbar0 \
     tesseract-ocr \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Define o diretório de trabalho dentro do container
 WORKDIR /app
 
-# Copia requirements.txt e instala dependências Python
+# Copia somente requirements.txt primeiro para usar cache do Docker
 COPY requirements.txt .
+
+# Usa --no-cache-dir para pip evitar cache local e deixar imagem menor
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia o restante do código para o container
+# Copia o restante do código para o container (após instalar libs)
 COPY . .
 
-# Expõe a porta onde o Flask roda
 EXPOSE 5000
 
-# Comando padrão para rodar a aplicação
 CMD ["python", "app.py"]
 
