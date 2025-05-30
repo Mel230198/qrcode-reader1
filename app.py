@@ -12,10 +12,8 @@ UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
 API_DESTINO_URL = 'https://gestop.pt/acesso-gestop/webhook.php'
 
-# Criação da pasta de upload
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Configuração do logger
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -45,14 +43,17 @@ def enviar_para_api(dados):
         with open('qrcode_recebido.txt', 'a', encoding='utf-8') as f:
             f.write(f"{valor}\n")
 
-        # Envia para a URL remota via POST
         payload = {'dados': valor}
-        response = requests.post(API_DESTINO_URL, json=payload)
+        logger.debug(f"Enviando para {API_DESTINO_URL} o payload: {payload}")
 
-        logger.info(f"[ENVIO] Dados: {valor}")
+        response = requests.post(API_DESTINO_URL, json=payload, timeout=10)
+        response.raise_for_status()
+
         logger.info(f"[RESPOSTA] Status: {response.status_code} - Texto: {response.text}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro ao enviar dados para API externa: {e}")
     except Exception as e:
-        logger.exception(f"Erro ao enviar dados para API externa: {str(e)}")
+        logger.exception(f"Erro inesperado: {e}")
 
 
 @app.route('/', methods=['GET', 'POST'])
