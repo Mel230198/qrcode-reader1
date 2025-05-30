@@ -23,21 +23,28 @@ def processar_arquivo(arquivo):
     extensao = arquivo.filename.rsplit('.', 1)[1].lower()
 
     if extensao == 'pdf':
-        return ler_qrcode_de_pdf(arquivo.read())
+        conteudo = ler_qrcode_de_pdf(arquivo.read())
+        logger.debug(f"QR Code extraído do PDF: {conteudo}")
+        return conteudo
     else:
         nome_seguro = secure_filename(arquivo.filename)
         caminho = os.path.join(UPLOAD_FOLDER, nome_seguro)
         arquivo.save(caminho)
         try:
-            return ler_qrcode_de_imagem(caminho)
+            conteudo = ler_qrcode_de_imagem(caminho)
+            logger.debug(f"QR Code extraído da imagem: {conteudo}")
+            return conteudo
         finally:
             os.remove(caminho)
 
 
 def enviar_para_api(dados):
-    """Salva localmente o conteúdo do QR e envia via POST JSON para a API externa."""
+    """Envia via POST JSON para a API externa o conteúdo do QR Code."""
     try:
-        valor = dados[0] if isinstance(dados, list) and dados else str(dados)
+        if isinstance(dados, list) and dados:
+            valor = dados[0]
+        else:
+            valor = str(dados)
 
         # Salva localmente para debug
         with open('qrcode_recebido.txt', 'a', encoding='utf-8') as f:
@@ -50,10 +57,16 @@ def enviar_para_api(dados):
         response.raise_for_status()
 
         logger.info(f"[RESPOSTA] Status: {response.status_code} - Texto: {response.text}")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao enviar dados para API externa: {e}")
+        return True
+    except requests.exceptions.Timeout:
+        logger.error("Timeout ao enviar dados para API externa")
+    except requests.exceptions.ConnectionError:
+        logger.error("Erro de conexão ao enviar dados para API externa")
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Erro HTTP: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Erro inesperado: {e}")
+    return False
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -65,14 +78,20 @@ def index():
 
         if not arquivo or arquivo.filename == '':
             resultado = ["Nenhum arquivo enviado."]
+            logger.warning("Nenhum arquivo foi enviado na requisição POST.")
         elif not allowed_file(arquivo.filename, ALLOWED_EXTENSIONS):
             resultado = ["Formato não suportado. Use PDF, JPG, PNG, BMP, TIFF ou WEBP."]
+            logger.warning(f"Arquivo com formato não suportado: {arquivo.filename}")
         else:
             try:
                 resultado = processar_arquivo(arquivo)
                 logger.debug(f"Conteúdo extraído do QR Code: {resultado}")
                 if resultado:
-                    enviar_para_api(resultado)
+                    sucesso = enviar_para_api(resultado)
+                    if not sucesso:
+                        resultado = ["Falha ao enviar dados para a API externa."]
+                else:
+                    resultado = ["QR Code não encontrado ou inválido."]
             except Exception as e:
                 logger.exception("Erro durante o processamento do QR Code")
                 resultado = [f"Erro durante o processamento: {str(e)}"]
@@ -82,7 +101,7 @@ def index():
 
 @app.route('/receber-qrcode', methods=['POST'])
 def receber_qrcode():
-    """Endpoint de teste para receber QR Codes via POST JSON."""
+    """Endpoint para receber QR Codes via POST JSON."""
     dados = request.get_json()
     logger.info(f"QR Code recebido via /receber-qrcode: {dados}")
     return jsonify({'status': 'ok', 'mensagem': 'QR Code recebido com sucesso'}), 200
@@ -90,3 +109,4 @@ def receber_qrcode():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
