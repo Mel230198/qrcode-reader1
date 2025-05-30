@@ -14,13 +14,15 @@ API_DESTINO_URL = 'https://gestop.pt/acesso-gestop/webhook.php'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Configuração do logger
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
 def processar_arquivo(arquivo):
     """Processa o arquivo enviado e retorna o conteúdo do QR Code."""
-    extensao = arquivo.filename.rsplit('.', 1)[1].lower()
+    extensao = arquivo.filename.rsplit('.', 1)[-1].lower()
+    logger.debug(f"Processando arquivo com extensão: {extensao}")
 
     if extensao == 'pdf':
         conteudo = ler_qrcode_de_pdf(arquivo.read())
@@ -41,6 +43,7 @@ def processar_arquivo(arquivo):
 def enviar_para_api(dados):
     """Envia via POST JSON para a API externa o conteúdo do QR Code."""
     try:
+        # Extrai o primeiro item se dados for lista, senão usa string direto
         if isinstance(dados, list) and dados:
             valor = dados[0]
         else:
@@ -51,13 +54,14 @@ def enviar_para_api(dados):
             f.write(f"{valor}\n")
 
         payload = {'dados': valor}
-        logger.debug(f"Enviando para {API_DESTINO_URL} o payload: {payload}")
+        logger.debug(f"Tentando enviar para {API_DESTINO_URL} o payload: {payload}")
 
         response = requests.post(API_DESTINO_URL, json=payload, timeout=10)
         response.raise_for_status()
 
         logger.info(f"[RESPOSTA] Status: {response.status_code} - Texto: {response.text}")
         return True
+
     except requests.exceptions.Timeout:
         logger.error("Timeout ao enviar dados para API externa")
     except requests.exceptions.ConnectionError:
@@ -65,7 +69,8 @@ def enviar_para_api(dados):
     except requests.exceptions.HTTPError as e:
         logger.error(f"Erro HTTP: {e.response.status_code} - {e.response.text}")
     except Exception as e:
-        logger.exception(f"Erro inesperado: {e}")
+        logger.exception(f"Erro inesperado ao enviar dados: {e}")
+
     return False
 
 
@@ -86,12 +91,14 @@ def index():
             try:
                 resultado = processar_arquivo(arquivo)
                 logger.debug(f"Conteúdo extraído do QR Code: {resultado}")
-                if resultado:
+
+                if not resultado:
+                    logger.warning("Nenhum QR Code detectado no arquivo.")
+                    resultado = ["QR Code não encontrado ou inválido."]
+                else:
                     sucesso = enviar_para_api(resultado)
                     if not sucesso:
                         resultado = ["Falha ao enviar dados para a API externa."]
-                else:
-                    resultado = ["QR Code não encontrado ou inválido."]
             except Exception as e:
                 logger.exception("Erro durante o processamento do QR Code")
                 resultado = [f"Erro durante o processamento: {str(e)}"]
@@ -109,4 +116,3 @@ def receber_qrcode():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
