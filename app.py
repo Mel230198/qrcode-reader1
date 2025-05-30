@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 from werkzeug.utils import secure_filename
+from urllib.parse import quote
 from utils import allowed_file, ler_qrcode_de_pdf, ler_qrcode_de_imagem
 
 app = Flask(__name__)
@@ -10,7 +11,7 @@ app = Flask(__name__)
 # Configurações
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
-API_DESTINO_URL = 'https://gestop.pt/acesso-gestop/webhook.php'  # Altere para o destino real
+API_DESTINO_URL = 'https://gestop.pt/acesso-gestop/webhook.php'
 
 # Criação da pasta de upload
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def processar_arquivo(arquivo):
-    """Processa o arquivo e retorna os dados lidos do QRCode."""
+    """Processa o arquivo enviado e retorna o conteúdo do QR Code."""
     extensao = arquivo.filename.rsplit('.', 1)[1].lower()
 
     if extensao == 'pdf':
@@ -37,12 +38,18 @@ def processar_arquivo(arquivo):
 
 
 def enviar_para_api(dados):
-    """Envia os dados lidos do QR Code para uma API externa."""
+    """Envia os dados extraídos do QR Code via GET, como parâmetro da URL."""
     try:
-        response = requests.post(API_DESTINO_URL, json={'dados': dados})
-        logger.info(f"Enviado para API externa. Status: {response.status_code} - Resposta: {response.text}")
+        # Usa o primeiro valor se for uma lista
+        valor = dados[0] if isinstance(dados, list) and dados else str(dados)
+        valor_codificado = quote(valor)
+
+        url = f"{API_DESTINO_URL}?dados={valor_codificado}"
+        response = requests.get(url)
+
+        logger.info(f"Enviado para: {url} - Status: {response.status_code} - Resposta: {response.text}")
     except Exception as e:
-        logger.exception(f"Erro ao enviar dados para API externa: {str(e)}")
+        logger.exception(f"Erro ao enviar dados para a API externa: {str(e)}")
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -62,7 +69,7 @@ def index():
                 if resultado:
                     enviar_para_api(resultado)
             except Exception as e:
-                logger.exception("Erro durante o processamento")
+                logger.exception("Erro durante o processamento do QR Code")
                 resultado = [f"Erro durante o processamento: {str(e)}"]
 
     return render_template('index.html', resultado=resultado)
@@ -70,10 +77,12 @@ def index():
 
 @app.route('/receber-qrcode', methods=['POST'])
 def receber_qrcode():
+    """Endpoint de teste para receber QR Codes via POST JSON."""
     dados = request.get_json()
-    logger.info(f"QR Code recebido: {dados}")
+    logger.info(f"QR Code recebido via /receber-qrcode: {dados}")
     return jsonify({'status': 'ok', 'mensagem': 'QR Code recebido com sucesso'}), 200
 
 
 if __name__ == '__main__':
     app.run(debug=True)
+
