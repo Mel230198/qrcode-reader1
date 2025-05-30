@@ -24,8 +24,38 @@ logger = logging.getLogger(__name__)
 
 # === Funções de Processamento ===
 
-def processar_arquivo(arquivo):
-    """Lê o QR Code de um arquivo PDF ou imagem."""
+def processar_arquivo_por_caminho(caminho_arquivo):
+    """Lê o QR Code de um arquivo usando o caminho fornecido."""
+    try:
+        # Verifica se o arquivo existe
+        if not os.path.exists(caminho_arquivo):
+            logger.error(f"Arquivo não encontrado: {caminho_arquivo}")
+            return None
+        
+        # Verifica a extensão
+        extensao = caminho_arquivo.rsplit('.', 1)[-1].lower()
+        if not allowed_file(caminho_arquivo, ALLOWED_EXTENSIONS):
+            logger.error(f"Extensão não permitida: {extensao}")
+            return None
+            
+        logger.debug(f"Processando arquivo: {caminho_arquivo} (extensão: {extensao})")
+
+        if extensao == 'pdf':
+            with open(caminho_arquivo, 'rb') as f:
+                conteudo = ler_qrcode_de_pdf(f.read())
+        else:
+            conteudo = ler_qrcode_de_imagem(caminho_arquivo)
+
+        logger.debug(f"QR Code extraído: {conteudo}")
+        return conteudo
+        
+    except Exception as e:
+        logger.exception(f"Erro ao processar arquivo: {caminho_arquivo}")
+        return None
+
+
+def processar_arquivo_upload(arquivo):
+    """Lê o QR Code de um arquivo enviado via upload (mantido para compatibilidade)."""
     extensao = arquivo.filename.rsplit('.', 1)[-1].lower()
     logger.debug(f"Processando arquivo com extensão: {extensao}")
 
@@ -85,8 +115,8 @@ def enviar_para_api(dados):
             API_DESTINO_URL, 
             json=payload,
             headers=headers,
-            timeout=30,  # Aumenta timeout
-            verify=True   # Verifica SSL
+            timeout=30,
+            verify=True
         )
         
         logger.info(f"=== RESPOSTA DA API ===")
@@ -132,82 +162,161 @@ def testar_conectividade():
 
 # === Rotas ===
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
-    """Página principal para envio de arquivos contendo QR Code."""
-    resultado = []
-
-    if request.method == 'POST':
-        arquivo = request.files.get('arquivo')
-
-        if not arquivo or arquivo.filename == '':
-            resultado = ["Nenhum arquivo enviado."]
-            logger.warning("Nenhum arquivo foi enviado.")
-        elif not allowed_file(arquivo.filename, ALLOWED_EXTENSIONS):
-            resultado = ["Formato não suportado. Use PDF, JPG, PNG, BMP, TIFF ou WEBP."]
-            logger.warning(f"Formato inválido: {arquivo.filename}")
-        else:
-            try:
-                resultado = processar_arquivo(arquivo)
-
-                if not resultado:
-                    resultado = ["QR Code não encontrado ou inválido."]
-                    logger.warning("QR Code vazio ou não detectado.")
-                else:
-                    logger.info(f"QR Code processado: {resultado}")
-                    if enviar_para_api(resultado):
-                        resultado.append("✅ Dados enviados com sucesso para a API!")
-                    else:
-                        resultado.append("❌ Falha ao enviar dados para a API externa.")
-                        
-            except Exception as e:
-                logger.exception("Erro ao processar o QR Code.")
-                resultado = [f"Erro durante o processamento: {str(e)}"]
-
-    return render_template('index.html', resultado=resultado)
+    """Página principal com instruções de uso."""
+    return """
+    <h1>🔍 QR Code Reader API</h1>
+    <h2>Como usar:</h2>
+    <ul>
+        <li><strong>Processar arquivo via caminho:</strong><br>
+            <code>GET /processar?arquivo=/caminho/para/arquivo.pdf</code></li>
+        <li><strong>Teste de envio:</strong><br>
+            <code>GET /testar-envio</code></li>
+        <li><strong>Informações de debug:</strong><br>
+            <code>GET /debug-info</code></li>
+        <li><strong>Upload manual (opcional):</strong><br>
+            <code>POST /upload</code></li>
+    </ul>
+    <h2>Formatos suportados:</h2>
+    <p>PDF, JPG, JPEG, PNG, BMP, TIFF, WEBP</p>
+    """
 
 
-@app.route('/receber-qrcode', methods=['POST'])
-def receber_qrcode():
-    """Endpoint para receber QR Codes via JSON POST."""
-    try:
-        dados = request.get_json()
-        logger.info(f"QR Code recebido via /receber-qrcode: {dados}")
-        
-        # Log completo da requisição
-        logger.debug(f"Headers da requisição: {dict(request.headers)}")
-        logger.debug(f"Content-Type: {request.content_type}")
-        
-        return jsonify({
-            'status': 'ok', 
-            'mensagem': 'QR Code recebido com sucesso',
-            'dados_recebidos': dados
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Erro ao processar dados recebidos: {e}")
+@app.route('/processar', methods=['GET'])
+def processar_qrcode():
+    """Processa um arquivo QR Code usando o caminho fornecido na URL."""
+    caminho_arquivo = request.args.get('arquivo')
+    
+    if not caminho_arquivo:
         return jsonify({
             'status': 'erro',
-            'mensagem': f'Erro ao processar: {str(e)}'
+            'mensagem': 'Parâmetro "arquivo" é obrigatório. Exemplo: /processar?arquivo=/caminho/para/arquivo.pdf'
         }), 400
+    
+    logger.info(f"📁 Processando arquivo via caminho: {caminho_arquivo}")
+    
+    try:
+        # Processa o arquivo
+        resultado = processar_arquivo_por_caminho(caminho_arquivo)
+        
+        if not resultado:
+            return jsonify({
+                'status': 'erro',
+                'mensagem': 'QR Code não encontrado, arquivo não existe ou formato inválido',
+                'arquivo': caminho_arquivo
+            }), 400
+        
+        logger.info(f"🎯 QR Code encontrado: {resultado}")
+        
+        # Envia para a API
+        if enviar_para_api(resultado):
+            return jsonify({
+                'status': 'sucesso',
+                'mensagem': 'QR Code processado e enviado com sucesso',
+                'arquivo': caminho_arquivo,
+                'qrcode_dados': resultado,
+                'enviado_para_api': True
+            }), 200
+        else:
+            return jsonify({
+                'status': 'parcial',
+                'mensagem': 'QR Code processado mas falha ao enviar para API',
+                'arquivo': caminho_arquivo,
+                'qrcode_dados': resultado,
+                'enviado_para_api': False
+            }), 200
+            
+    except Exception as e:
+        logger.exception(f"Erro ao processar: {caminho_arquivo}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro durante o processamento: {str(e)}',
+            'arquivo': caminho_arquivo
+        }), 500
+
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_arquivo():
+    """Rota opcional para upload manual de arquivos."""
+    if request.method == 'GET':
+        return render_template('upload.html') if os.path.exists('templates/upload.html') else """
+        <form method="POST" enctype="multipart/form-data">
+            <h2>Upload de Arquivo com QR Code</h2>
+            <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.webp" required>
+            <button type="submit">Processar QR Code</button>
+        </form>
+        """
+    
+    # POST - processa o upload
+    arquivo = request.files.get('arquivo')
+    
+    if not arquivo or arquivo.filename == '':
+        return jsonify({'status': 'erro', 'mensagem': 'Nenhum arquivo enviado'}), 400
+    
+    if not allowed_file(arquivo.filename, ALLOWED_EXTENSIONS):
+        return jsonify({'status': 'erro', 'mensagem': 'Formato não suportado'}), 400
+    
+    try:
+        resultado = processar_arquivo_upload(arquivo)
+        
+        if not resultado:
+            return jsonify({'status': 'erro', 'mensagem': 'QR Code não encontrado'}), 400
+        
+        if enviar_para_api(resultado):
+            return jsonify({
+                'status': 'sucesso',
+                'mensagem': 'Processado e enviado com sucesso',
+                'qrcode_dados': resultado
+            }), 200
+        else:
+            return jsonify({
+                'status': 'parcial',
+                'mensagem': 'Processado mas falha no envio',
+                'qrcode_dados': resultado
+            }), 200
+            
+    except Exception as e:
+        logger.exception("Erro no upload")
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
 @app.route('/testar-envio', methods=['GET'])
 def testar_envio():
     """Envia um dado fixo para testar integração com a API externa."""
-    valor_teste = "teste-envio-manual-" + str(requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC').json()['unixtime'])
-    logger.info(f"Iniciando teste de envio com dado: {valor_teste}")
-    
-    # Primeiro testa conectividade
-    if not testar_conectividade():
-        return "❌ API não está acessível para teste de conectividade.", 500
-    
-    sucesso = enviar_para_api(valor_teste)
+    try:
+        # Gera um valor único para teste
+        import time
+        valor_teste = f"teste-envio-manual-{int(time.time())}"
+        logger.info(f"🧪 Iniciando teste de envio com dado: {valor_teste}")
+        
+        # Primeiro testa conectividade
+        if not testar_conectividade():
+            return jsonify({
+                'status': 'erro',
+                'mensagem': 'API não está acessível para teste de conectividade'
+            }), 500
+        
+        sucesso = enviar_para_api(valor_teste)
 
-    if sucesso:
-        return f"✅ Envio de teste realizado com sucesso. Valor enviado: {valor_teste}"
-    else:
-        return "❌ Falha ao enviar dados de teste para a API externa.", 500
+        if sucesso:
+            return jsonify({
+                'status': 'sucesso',
+                'mensagem': 'Envio de teste realizado com sucesso',
+                'valor_enviado': valor_teste
+            }), 200
+        else:
+            return jsonify({
+                'status': 'erro',
+                'mensagem': 'Falha ao enviar dados de teste para a API externa'
+            }), 500
+            
+    except Exception as e:
+        logger.exception("Erro no teste de envio")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro durante teste: {str(e)}'
+        }), 500
 
 
 @app.route('/debug-info', methods=['GET'])
@@ -218,13 +327,24 @@ def debug_info():
         'upload_folder': UPLOAD_FOLDER,
         'allowed_extensions': list(ALLOWED_EXTENSIONS),
         'python_version': os.sys.version,
-        'flask_version': Flask.__version__
+        'flask_version': Flask.__version__,
+        'endpoints': {
+            'processar': '/processar?arquivo=/caminho/para/arquivo.pdf',
+            'testar_envio': '/testar-envio',
+            'upload': '/upload',
+            'debug': '/debug-info'
+        }
     }
     return jsonify(info)
 
 
 # === Execução ===
 if __name__ == '__main__':
-    logger.info("Iniciando aplicação Flask...")
-    logger.info(f"URL da API destino: {API_DESTINO_URL}")
+    logger.info("🚀 Iniciando aplicação Flask...")
+    logger.info(f"🌐 URL da API destino: {API_DESTINO_URL}")
+    logger.info("📋 Endpoints disponíveis:")
+    logger.info("   GET /processar?arquivo=/caminho/arquivo.pdf")
+    logger.info("   GET /testar-envio")
+    logger.info("   GET /debug-info")
+    logger.info("   GET|POST /upload")
     app.run(host='0.0.0.0', port=5000, debug=True)
