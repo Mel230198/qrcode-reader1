@@ -4,3 +4,5 @@ Pillow
 pyzbar
 pdf2image
 opencv-python-headless
+requests
+
