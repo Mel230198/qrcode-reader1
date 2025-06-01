@@ -1,14 +1,18 @@
+import subprocess
+import os
 import cv2
 import numpy as np
-import logging
-from pyzbar.pyzbar import decode
 from pdf2image import convert_from_bytes
 from PIL import Image
+import logging
 
-# Configuração de log
+# Logger
 logger = logging.getLogger("utils")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
+
+# Caminho do ZXing .jar
+ZXING_JAR_PATH = os.path.join(os.path.dirname(__file__), 'libs', 'javase-3.5.2.jar')
 
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
@@ -21,34 +25,39 @@ def redimensionar_imagem(imagem_cv, largura_max=2000):
         return cv2.resize(imagem_cv, nova_dimensao, interpolation=cv2.INTER_AREA)
     return imagem_cv
 
-def aplicar_tecnicas_preprocessamento(imagem_gray):
+def salvar_imagem_temporaria(imagem_cv):
+    temp_path = 'temp_img.png'
+    cv2.imwrite(temp_path, imagem_cv)
+    return temp_path
+
+def executar_zxing(caminho_arquivo):
     """
-    Aplica várias técnicas de pré-processamento e tenta decodificar QR Codes.
+    Executa ZXing para ler QR Code ou código de barras.
     """
-    resultados = set()
-    tecnicas = {
-        "original": imagem_gray,
-        "threshold": cv2.threshold(imagem_gray, 127, 255, cv2.THRESH_BINARY)[1],
-        "adaptive_threshold": cv2.adaptiveThreshold(imagem_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2),
-        "blur": cv2.GaussianBlur(imagem_gray, (3, 3), 0),
-        "equalize": cv2.equalizeHist(imagem_gray),
-        "invert": cv2.bitwise_not(imagem_gray),
-    }
+    try:
+        comando = [
+            'java', '-cp', ZXING_JAR_PATH,
+            'com.google.zxing.client.j2se.CommandLineRunner',
+            caminho_arquivo
+        ]
 
-    for nome, imagem in tecnicas.items():
-        for qr in decode(imagem):
-            texto = qr.data.decode('utf-8')
-            if texto not in resultados:
-                logger.info(f"QR Code detectado com técnica: {nome}")
-                resultados.add(texto)
+        resultado = subprocess.run(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    return list(resultados)
+        if resultado.returncode == 0:
+            saida = resultado.stdout.strip()
+            if saida:
+                linhas = saida.splitlines()
+                textos = [linha for linha in linhas if not linha.startswith('file:')]
+                return textos if textos else ["Nenhum QR Code encontrado."]
+            else:
+                return ["Nenhum QR Code encontrado."]
+        else:
+            logger.error(f"Erro ZXing: {resultado.stderr}")
+            return [f"Erro ZXing: {resultado.stderr.strip()}"]
 
-def detectar_qrcode_opencv(imagem_gray):
-    """Fallback com OpenCV."""
-    detector = cv2.QRCodeDetector()
-    data, _, _ = detector.detectAndDecode(imagem_gray)
-    return data or None
+    except Exception as e:
+        logger.exception("Falha ao executar ZXing")
+        return [f"Erro ao executar ZXing: {str(e)}"]
 
 def ler_qrcode_de_imagem(caminho_imagem):
     try:
@@ -62,16 +71,12 @@ def ler_qrcode_de_imagem(caminho_imagem):
             return ["Erro ao carregar a imagem."]
 
         imagem_cv = redimensionar_imagem(imagem_cv)
-        imagem_gray = cv2.cvtColor(imagem_cv, cv2.COLOR_BGR2GRAY)
+        temp_path = salvar_imagem_temporaria(imagem_cv)
 
-        resultados = aplicar_tecnicas_preprocessamento(imagem_gray)
+        resultado = executar_zxing(temp_path)
 
-        if not resultados:
-            fallback = detectar_qrcode_opencv(imagem_gray)
-            if fallback:
-                resultados.append(fallback)
-
-        return resultados or ["Nenhum QR Code foi encontrado na imagem."]
+        os.remove(temp_path)
+        return resultado
 
     except Exception as e:
         logger.exception("Erro ao processar imagem")
@@ -86,17 +91,14 @@ def ler_qrcode_de_pdf(conteudo_pdf):
             logger.info(f"Processando página {idx + 1}")
             imagem_cv = cv2.cvtColor(np.array(pagina), cv2.COLOR_RGB2BGR)
             imagem_cv = redimensionar_imagem(imagem_cv)
-            imagem_gray = cv2.cvtColor(imagem_cv, cv2.COLOR_BGR2GRAY)
+            temp_path = salvar_imagem_temporaria(imagem_cv)
 
-            textos = aplicar_tecnicas_preprocessamento(imagem_gray)
+            textos = executar_zxing(temp_path)
             resultados.update(textos)
 
-            if not textos:
-                fallback = detectar_qrcode_opencv(imagem_gray)
-                if fallback:
-                    resultados.add(fallback)
+            os.remove(temp_path)
 
-        return list(resultados) or ["Nenhum QR Code foi encontrado no PDF."]
+        return list(resultados) or ["Nenhum QR Code encontrado no PDF."]
 
     except Exception as e:
         logger.exception("Erro ao processar PDF")
